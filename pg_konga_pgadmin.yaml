@@ -57,7 +57,7 @@ metadata:
   namespace: konga
 spec:
   rules:
-  - host: pgadmin.viavarejo.com.br
+  - host: pgadmin.testdomain.com.br
     http:
       paths:
       - backend:
@@ -157,11 +157,13 @@ spec:
         image: pantsel/konga
         env:
         - name: NODE_ENV
-          value: production
+          value: development
         - name: DB_ADAPTER
           value: postgres
         - name: DB_HOST
           value: postgres
+        - name: DB_PORT
+          value: '5432'
         - name: DB_USER
           valueFrom:
             secretKeyRef:
@@ -173,7 +175,9 @@ spec:
               name: kongcreds
               key: password
         - name: DB_DATABASE
-          value: postgres
+          value: konga
+        - name: DB_PG_SCHEMA
+          value: konga
         ports:
         - containerPort: 1337
           protocol: TCP
@@ -202,7 +206,7 @@ metadata:
   namespace: konga
 spec:
   rules:
-  - host: konga.viavarejo.com.br
+  - host: konga.testdomain.com.br
     http:
       paths:
       - backend:
