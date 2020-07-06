@@ -5,9 +5,12 @@ How to run:
 
 kubectl apply -f pg_konga_pgadmin.yaml
 
-Add to hosts file:
+Add to hosts file (/etc/hosts):
 - <YOUR_INGRESS_IP> pgadmin.testdomain.com.br
 - <YOUR_INGRESS_IP> konga.testdomain.com.br
+
+On Mac run the commmand, after editing hosts file:
+killall -HUP mDNSResponder
 
 Initially deploying:
 Konga:
