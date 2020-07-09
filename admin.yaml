@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kong
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: admin
+  name: admin
+  namespace: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin
+  template:
+    metadata:
+      annotations:
+        prometheus.io/port: "8100"
+        prometheus.io/scrape: "true"
+      labels:
+        app: admin
+    spec:
+      containers:
+      - env:
+        - name: KONG_ADMIN_LISTEN
+          value: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+        - name: KONG_STATUS_LISTEN
+          value: 0.0.0.0:8100
+        - name: KONG_DATABASE
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_DATABASE
+        - name: KONG_PG_DATABASE
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_DATABASE
+        - name: KONG_PG_HOST
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_HOST
+        - name: KONG_PG_USER
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_USER
+        - name: KONG_PG_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_PASSWORD
+        - name: KONG_NGINX_WORKER_PROCESSES
+          value: "1"
+        - name: KONG_ADMIN_ACCESS_LOG
+          value: /dev/stdout
+        - name: KONG_ADMIN_ERROR_LOG
+          value: /dev/stderr
+        - name: KONG_PROXY_ERROR_LOG
+          value: /dev/stderr
+        image: kong:2.0.0
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - kong quit
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /status
+            port: 8100
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: admin
+        ports:
+        - containerPort: 8001
+          name: admin
+          protocol: TCP
+        - containerPort: 8444
+          name: admin-ssl
+          protocol: TCP
+        - containerPort: 8100
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /status
+            port: 8100
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        securityContext:
+          runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: admin
+  name: admin
+  namespace: kong
+spec:
+  ports:
+  - name: admin
+    port: 80
+    protocol: TCP
+    targetPort: 8001
+  - name: admin-ssl
+    port: 443
+    protocol: TCP
+    targetPort: 8444
+  selector:
+    app: admin
+---
+kind: Ingress
+apiVersion: extensions/v1beta1
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  name: admin
+  namespace: kong
+spec:
+  rules:
+  - host: admin.testdomain.com.br
+    http:
+      paths:
+      - backend:
+          serviceName: admin
+          servicePort: 80
+        path: /

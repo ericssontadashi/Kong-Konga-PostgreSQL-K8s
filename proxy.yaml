@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kong
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+  namespace: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy
+  template:
+    metadata:
+      annotations:
+        prometheus.io/port: "8100"
+        prometheus.io/scrape: "true"
+      labels:
+        app: proxy
+    spec:
+      containers:
+      - env:
+        - name: KONG_PROXY_LISTEN
+          value: 0.0.0.0:8000, 0.0.0.0:8443 ssl http2
+        - name: KONG_STATUS_LISTEN
+          value: 0.0.0.0:8100
+        - name: KONG_DATABASE
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_DATABASE
+        - name: KONG_PG_DATABASE
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_DATABASE
+        - name: KONG_PG_HOST
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_HOST
+        - name: KONG_PG_USER
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_USER
+        - name: KONG_PG_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_PASSWORD
+        - name: KONG_NGINX_WORKER_PROCESSES
+          value: "1"
+        - name: KONG_ADMIN_ACCESS_LOG
+          value: /dev/stdout
+        - name: KONG_ADMIN_ERROR_LOG
+          value: /dev/stderr
+        - name: KONG_PROXY_ERROR_LOG
+          value: /dev/stderr
+        image: kong:2.0.0
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - kong quit
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /status
+            port: 8100
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: proxy
+        ports:
+        - containerPort: 8000
+          name: proxy
+          protocol: TCP
+        - containerPort: 8443
+          name: proxy-ssl
+          protocol: TCP
+        - containerPort: 8100
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /status
+            port: 8100
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        securityContext:
+          runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: proxy
+  name: proxy
+  namespace: kong
+spec:
+  ports:
+  - name: proxy
+    port: 80
+    protocol: TCP
+    targetPort: 8000
+  - name: proxy-ssl
+    port: 443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app: proxy
+---
+kind: Ingress
+apiVersion: extensions/v1beta1
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  name: proxy
+  namespace: kong
+spec:
+  rules:
+  - host: proxy.testdomain.com.br
+    http:
+      paths:
+      - backend:
+          serviceName: proxy
+          servicePort: 80
+        path: /
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kong-migrations
+  labels:
+    app: migrations
+  namespace: kong
+spec:
+  template:
+    metadata:
+      labels:
+        app: migrations
+      name: kong-migrations
+    spec:
+      containers:
+      - command:
+        - /bin/sh
+        - -c
+        - kong migrations bootstrap
+        env:
+        - name: KONG_DATABASE
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_DATABASE
+        - name: KONG_PG_DATABASE
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_DATABASE
+        - name: KONG_PG_HOST
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_HOST
+        - name: KONG_PG_USER
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_USER
+        - name: KONG_PG_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+                name: kong-config
+                key: KONG_PG_PASSWORD
+        image: kong:2.0.0
+        name: kong-migrations
+      initContainers:
+      - command:
+        - /bin/sh
+        - -c
+        - until nc -zv $KONG_PG_HOST $KONG_PG_PORT -w1; do echo 'waiting for db';
+          sleep 1; done
+        env:
+        - name: KONG_PG_HOST
+          value: postgres
+        - name: KONG_PG_PORT
+          value: "5432"
+        image: busybox
+        name: wait-for-postgres
+      restartPolicy: OnFailure

@@ -207,7 +207,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus-service
+  name: prometheus
   namespace: monitoring
   annotations:
       prometheus.io/scrape: 'true'
@@ -235,6 +235,6 @@ spec:
     http:
       paths:
       - backend:
-          serviceName: prometheus-service
+          serviceName: prometheus
           servicePort: 8080
         path: /
