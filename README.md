@@ -87,3 +87,5 @@ On SSL Mode, set disable.
 On Version, set 9.6.
 
 On Dashboards, import the following: 7424 and select Prometheus data source.
+
+Import the following dashboard on grafana for cluster`s view: 315
